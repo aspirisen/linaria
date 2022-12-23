@@ -34,6 +34,7 @@ export interface IProps {
   class?: string;
   name: string;
   propsAsIs: boolean;
+  propsFiltering: 'automatic' | 'dollar-sign';
   vars?: Record<string, Expression[]>;
 }
 
@@ -246,6 +247,7 @@ export default class StyledProcessor extends TaggedTemplateProcessor {
     const propsObj: IProps = {
       name: this.displayName,
       class: this.className,
+      propsFiltering: this.options.propsFiltering ?? 'automatic',
       propsAsIs:
         typeof this.component !== 'string' || !allTagsSet.has(this.component),
     };

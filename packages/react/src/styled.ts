@@ -25,6 +25,7 @@ type Options = {
   class: string;
   name: string;
   propsAsIs: boolean;
+  propsFiltering: 'automatic' | 'dollar-sign';
   vars?: {
     [key: string]: [
       string | number | ((props: unknown) => string | number),
@@ -53,12 +54,24 @@ export const omit = <T extends Record<string, unknown>, TKeys extends keyof T>(
   return res;
 };
 
-function filterProps<T extends Record<string, unknown>, TKeys extends keyof T>(
-  asIs: boolean,
-  props: T,
-  omitKeys: TKeys[]
+function filterPropsAutomatic<
+  T extends Record<string, unknown>,
+  TKeys extends keyof T
+>(
+  options: Options,
+  component: any,
+  props: Partial<T>
 ): Partial<Omit<T, TKeys>> {
-  const filteredProps = omit(props, omitKeys) as Partial<T>;
+  const filteredProps = { ...props };
+
+  const asIs =
+    options.propsAsIs === undefined
+      ? !(
+          typeof component === 'string' &&
+          component.indexOf('-') === -1 &&
+          !isCapital(component[0])
+        )
+      : options.propsAsIs;
 
   if (!asIs) {
     /**
@@ -75,6 +88,21 @@ function filterProps<T extends Record<string, unknown>, TKeys extends keyof T>(
       }
     });
   }
+
+  return filteredProps;
+}
+
+function filterPropsDollarSign<
+  T extends Record<string, unknown>,
+  TKeys extends keyof T
+>(props: Partial<T>): Partial<Omit<T, TKeys>> {
+  const filteredProps = { ...props };
+
+  Object.keys(filteredProps).forEach((key) => {
+    if (key[0] === '$') {
+      delete filteredProps[key];
+    }
+  });
 
   return filteredProps;
 }
@@ -144,18 +172,12 @@ function styled(tag: any): any {
 
     const render = (props: any, ref: any) => {
       const { as: component = tag, class: className } = props;
-      const shouldKeepProps =
-        options.propsAsIs === undefined
-          ? !(
-              typeof component === 'string' &&
-              component.indexOf('-') === -1 &&
-              !isCapital(component[0])
-            )
-          : options.propsAsIs;
-      const filteredProps: IProps = filterProps(shouldKeepProps, props, [
-        'as',
-        'class',
-      ]);
+
+      const forcedRemovedProps = omit(props, ['as', 'class']);
+      const filteredProps: IProps =
+        options.propsFiltering === 'dollar-sign'
+          ? filterPropsDollarSign(forcedRemovedProps)
+          : filterPropsAutomatic(options, component, forcedRemovedProps);
 
       filteredProps.ref = ref;
       filteredProps.className = options.atomic
