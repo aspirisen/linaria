@@ -129,10 +129,14 @@ const warnIfInvalid = (value: unknown, componentName: string) => {
 };
 
 export function polymorphicComponentProps<
-  Props extends WithPolymorphicAttrs<Props, unknown, unknown>,
+  Props extends WithPolymorphicAttrs<any, As, Mix>,
+  NextProps,
   As extends AllowedTarget,
-  Mix extends AllowedTarget = As
->(props: Props, as?: As, mix?: Mix) {
+  Mix extends AllowedTarget
+>(
+  props: Props,
+  { as, mix }: undefined | WithPolymorphicAttrs<NextProps, As, Mix> = {}
+) {
   let finalAs: AllowedTarget[] = [];
 
   if (props.mix) {
@@ -170,7 +174,7 @@ export function polymorphicComponentProps<
   if (finalAs.length > 0) {
     return {
       as: finalAs.length === 1 ? finalAs[0] : finalAs,
-    };
+    } as WithPolymorphicAttrs<NextProps, As, Mix>;
   }
 
   return undefined;
@@ -336,7 +340,7 @@ type GatherElementTypeProps<T> = T extends ElementType
   ? Spread<GatherElementTypeProps<Element>, GatherElementTypeProps<RestElement>>
   : T extends [infer Element]
   ? GatherElementTypeProps<Element>
-  : Record<string, unknown>;
+  : {};
 
 interface WithPolymorphicAttrs<
   Props,
