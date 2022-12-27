@@ -6,6 +6,7 @@
  * - injects CSS variables used to define dynamic styles based on props
  */
 import validAttr from '@emotion/is-prop-valid';
+import type { ComponentPropsWithoutRef, ElementType } from 'react';
 import React from 'react';
 
 import { cx } from '@linaria/core';
@@ -127,6 +128,69 @@ const warnIfInvalid = (value: unknown, componentName: string) => {
   }
 };
 
+export function polymorphicComponentProps<
+  Props extends WithPolymorphicAttrs<Props, unknown, unknown>,
+  As extends AllowedTarget,
+  Mix extends AllowedTarget = As
+>(props: Props, as?: As, mix?: Mix) {
+  let finalAs: AllowedTarget[] = [];
+
+  if (props.mix) {
+    if (Array.isArray(props.mix)) {
+      finalAs = [...props.mix, ...finalAs];
+    } else {
+      finalAs = [...[props.mix], ...finalAs];
+    }
+  }
+
+  if (props.as) {
+    if (Array.isArray(props.as)) {
+      finalAs = [...finalAs, ...props.as];
+    } else {
+      finalAs = [...finalAs, ...[props.as]];
+    }
+  }
+
+  if (mix) {
+    if (Array.isArray(mix)) {
+      finalAs = finalAs.concat(mix);
+    } else {
+      finalAs = finalAs.concat([mix]);
+    }
+  }
+
+  if (as) {
+    if (Array.isArray(as)) {
+      finalAs = finalAs.concat(as);
+    } else {
+      finalAs = finalAs.concat([as]);
+    }
+  }
+
+  if (finalAs.length > 0) {
+    return {
+      as: finalAs.length === 1 ? finalAs[0] : finalAs,
+    };
+  }
+
+  return undefined;
+}
+
+function polymorphicComponentTarget<
+  Props extends WithPolymorphicAttrs<Props, unknown, unknown>
+>(props: Props | undefined, originalComponent: ElementType) {
+  if (props?.as) {
+    if (Array.isArray(props.as)) {
+      const [currentTarget, ...restAs] = props.as;
+      return { currentTarget, restAs };
+    }
+
+    return { currentTarget: props.as, restAs: undefined };
+  }
+
+  return { currentTarget: originalComponent, restAs: undefined };
+}
+
 interface IProps {
   className?: string;
   style?: Record<string, string>;
@@ -171,13 +235,18 @@ function styled(tag: any): any {
     }
 
     const render = (props: any, ref: any) => {
-      const { as: component = tag, class: className } = props;
+      const { class: className } = props;
+      const polyProps = polymorphicComponentProps(props);
+      const { currentTarget, restAs } = polymorphicComponentTarget(
+        polyProps,
+        tag
+      );
 
-      const forcedRemovedProps = omit(props, ['as', 'class']);
+      const forcedRemovedProps = omit(props, ['as', 'mix', 'class']);
       const filteredProps: IProps =
         options.propsFiltering === 'dollar-sign'
           ? filterPropsDollarSign(forcedRemovedProps)
-          : filterPropsAutomatic(options, component, forcedRemovedProps);
+          : filterPropsAutomatic(options, currentTarget, forcedRemovedProps);
 
       filteredProps.ref = ref;
       filteredProps.className = options.atomic
@@ -212,14 +281,10 @@ function styled(tag: any): any {
         filteredProps.style = style;
       }
 
-      if ((tag as any).__linaria && tag !== component) {
-        // If the underlying tag is a styled component, forward the `as` prop
-        // Otherwise the styles from the underlying component will be ignored
-        filteredProps.as = component;
-
-        return React.createElement(tag, filteredProps);
-      }
-      return React.createElement(component, filteredProps);
+      return React.createElement(currentTarget, {
+        ...filteredProps,
+        ...(restAs ? { as: restAs } : {}),
+      });
     };
 
     const Result = React.forwardRef
@@ -246,7 +311,41 @@ function styled(tag: any): any {
 type StyledComponent<T> = StyledMeta &
   ([T] extends [React.FunctionComponent<any>]
     ? T
-    : React.FunctionComponent<T & { as?: React.ElementType }>);
+    : <
+        E extends AllowedTarget = T,
+        Mix extends AllowedTarget | unknown = unknown
+      >(
+        props: T extends object ? PolymorphicComponentProps<T, E, Mix> : T
+      ) => React.ReactElement<T>);
+
+type KnownTarget = ElementType | readonly ElementType[];
+export type AllowedTarget = unknown | KnownTarget;
+
+export type PolymorphicComponentProps<
+  Props extends object,
+  As extends AllowedTarget,
+  Mix extends AllowedTarget = As
+> = WithPolymorphicAttrs<Props, As, Mix> &
+  Props &
+  Simplify<GatherElementTypeProps<As>> &
+  Simplify<GatherElementTypeProps<Mix>>;
+
+type GatherElementTypeProps<T> = T extends ElementType
+  ? Omit<ComponentPropsWithoutRef<T>, 'as' | 'mix'>
+  : T extends [infer Element, ...infer RestElement]
+  ? Spread<GatherElementTypeProps<Element>, GatherElementTypeProps<RestElement>>
+  : T extends [infer Element]
+  ? GatherElementTypeProps<Element>
+  : Record<string, unknown>;
+
+interface WithPolymorphicAttrs<
+  Props,
+  As extends AllowedTarget,
+  Mix extends AllowedTarget
+> {
+  as?: Props extends { as?: KnownTarget } ? Props['as'] : As | As[];
+  mix?: Props extends { mix?: KnownTarget } ? Props['mix'] : Mix | Mix[];
+}
 
 type StaticPlaceholder = string | number | CSSProperties | StyledMeta;
 
@@ -296,3 +395,42 @@ export default (process.env.NODE_ENV !== 'production'
       },
     })
   : styled) as Styled;
+
+/* Type utils from https://github.com/sindresorhus/type-fest */
+
+type Simplify<T> = { [KeyType in keyof T]: T[KeyType] };
+
+type Spread<
+  FirstType extends Spreadable,
+  SecondType extends Spreadable
+> = FirstType extends TupleOrArray
+  ? SecondType extends TupleOrArray
+    ? SpreadTupleOrArray<FirstType, SecondType>
+    : Simplify<SpreadObject<FirstType, SecondType>>
+  : Simplify<SpreadObject<FirstType, SecondType>>;
+
+type TupleOrArray = readonly [...unknown[]];
+type Spreadable = object | TupleOrArray;
+
+type SpreadTupleOrArray<
+  FirstType extends TupleOrArray,
+  SecondType extends TupleOrArray
+> = Array<FirstType[number] | SecondType[number]>;
+
+type SpreadObject<FirstType extends object, SecondType extends object> = {
+  [Key in keyof FirstType]: Key extends keyof SecondType
+    ? FirstType[Key]
+    : FirstType[Key];
+} & Pick<
+  SecondType,
+  RequiredKeysOf<SecondType> | Exclude<keyof SecondType, keyof FirstType>
+>;
+
+type RequiredKeysOf<BaseType extends object> = Exclude<
+  {
+    [Key in keyof BaseType]: BaseType extends Record<Key, BaseType[Key]>
+      ? Key
+      : never;
+  }[keyof BaseType],
+  undefined
+>;
