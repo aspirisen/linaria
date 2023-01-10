@@ -256,7 +256,9 @@ function styled(tag: any): any {
 
           warnIfInvalid(value, options.name);
 
-          style[`--${name}`] = `${value}${unit}`;
+          if (value !== '' && value != null && value !== undefined) {
+            style[`--${name}`] = `${value}${unit}`;
+          }
         }
 
         const ownStyle = filteredProps.style || {};
@@ -273,18 +275,22 @@ function styled(tag: any): any {
       const polyProps: { as?: any } = {};
 
       const getElement = () => {
-        if (Array.isArray(mix) && mix.length > 0) {
-          const [current, ...rest] = mix;
+        if (mix) {
+          const mixArray = Array.isArray(mix) ? mix : [mix];
 
-          if (Array.isArray(component)) {
-            polyProps.as = [...rest, ...props.as];
-          } else if (component) {
-            polyProps.as = [...rest, component];
-          } else {
-            polyProps.as = rest;
+          if (Array.isArray(mixArray) && mixArray.length > 0) {
+            const [current, ...rest] = mixArray;
+
+            if (Array.isArray(component)) {
+              polyProps.as = [...rest, ...props.as];
+            } else if (component) {
+              polyProps.as = [...rest, component];
+            } else {
+              polyProps.as = rest;
+            }
+
+            return current;
           }
-
-          return current;
         }
 
         if (Array.isArray(component)) {
@@ -383,7 +389,7 @@ type HtmlStyledTag<TName extends keyof JSX.IntrinsicElements> = <
         // Without Omit here TS tries to infer TAdditionalProps
         // from a component passed for interpolation
         props: JSX.IntrinsicElements[TName] & Omit<TAdditionalProps, never>
-      ) => string | number)
+      ) => undefined | null | string | number)
   >
 ) => StyledComponent<JSX.IntrinsicElements[TName] & TAdditionalProps>;
 
