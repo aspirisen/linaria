@@ -285,10 +285,12 @@ function styled(tag: any): any {
         filteredProps.style = style;
       }
 
-      return React.createElement(currentTarget, {
+      const targetProps = {
         ...filteredProps,
         ...(restAs ? { as: restAs } : {}),
-      });
+      };
+
+      return React.createElement(currentTarget, targetProps);
     };
 
     const Result = React.forwardRef
