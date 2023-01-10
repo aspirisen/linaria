@@ -297,6 +297,84 @@ describe('strategy shaker', () => {
     expect(metadata).toMatchSnapshot();
   });
 
+  it('handles val in variableNameConfig', async () => {
+    const { code, metadata } = await transform(
+      dedent`
+    import { styled as atomicStyled } from '@linaria/atomic';
+    import { styled } from '@linaria/react';
+
+    export const Title = styled('h1')\`
+      font-size: ${'${props => props.size}px'};
+    \`;
+
+    export const Body = atomicStyled('h1')\`
+      font-size: ${'${props => props.size}px'};
+    \`;
+`,
+      [
+        evaluator,
+        {
+          variableNameConfig: 'var',
+        },
+      ]
+    );
+
+    expect(code).toMatchSnapshot();
+    expect(metadata).toMatchSnapshot();
+  });
+
+  it('handles dashes in variableNameConfig', async () => {
+    const { code, metadata } = await transform(
+      dedent`
+    import { styled as atomicStyled } from '@linaria/atomic';
+    import { styled } from '@linaria/react';
+
+    export const Title = styled('h1')\`
+      font-size: ${'${props => props.size}px'};
+    \`;
+
+    export const Body = atomicStyled('h1')\`
+      font-size: ${'${props => props.size}px'};
+    \`;
+`,
+      [
+        evaluator,
+        {
+          variableNameConfig: 'dashes',
+        },
+      ]
+    );
+
+    expect(code).toMatchSnapshot();
+    expect(metadata).toMatchSnapshot();
+  });
+
+  it('handles raw in variableNameConfig', async () => {
+    const { code, metadata } = await transform(
+      dedent`
+    import { styled as atomicStyled } from '@linaria/atomic';
+    import { styled } from '@linaria/react';
+
+    export const Title = styled('h1')\`
+      font-size: ${'${props => props.size}px'};
+    \`;
+
+    export const Body = atomicStyled('h1')\`
+      font-size: ${'${props => props.size}px'};
+    \`;
+`,
+      [
+        evaluator,
+        {
+          variableNameConfig: 'raw',
+        },
+      ]
+    );
+
+    expect(code).toMatchSnapshot();
+    expect(metadata).toMatchSnapshot();
+  });
+
   it('transpiles styled template literal with function and tag', async () => {
     const { code, metadata } = await transform(
       dedent`
@@ -634,6 +712,25 @@ describe('strategy shaker', () => {
       height: ${'${props => { if (true) { return props.height } else { return 200 } }}'}px;
       grid-template-columns: ${'${unit}'}fr 1fr 1fr ${'${unit}'}fr;
       border-radius: ${'${function(props) { return 200 }}'}px
+    \`;
+    `,
+      [evaluator]
+    );
+
+    expect(code).toMatchSnapshot();
+    expect(metadata).toMatchSnapshot();
+  });
+
+  it('handles interpolation in css function followed by unit', async () => {
+    const { code, metadata } = await transform(
+      dedent`
+    import { styled } from '@linaria/atomic';
+
+    const size = 200;
+
+    export const Container = styled.div\`
+      transform: rotate(${'${props => props.$rotateDeg}'}deg);
+      width: ${'${size}'}px;
     \`;
     `,
       [evaluator]
