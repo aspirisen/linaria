@@ -5,6 +5,6 @@ export type {
   PolymorphicComponentProps,
   AllowedTarget,
 } from './styled';
-export { polymorphicComponentProps } from './styled';
+export { mergePolymorphicProps } from './styled';
 export type { CSSProperties } from '@linaria/core';
 export type { StyledMeta } from '@linaria/tags';

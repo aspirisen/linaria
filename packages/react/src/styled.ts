@@ -128,7 +128,34 @@ const warnIfInvalid = (value: unknown, componentName: string) => {
   }
 };
 
-export function polymorphicComponentProps<
+function mergePolyProps(
+  a: Array<AllowedTarget> | AllowedTarget | undefined,
+  b: Array<AllowedTarget> | AllowedTarget | undefined
+): AllowedTarget {
+  if (a === undefined) {
+    return b;
+  }
+
+  if (b === undefined) {
+    return a;
+  }
+
+  if (Array.isArray(a)) {
+    if (Array.isArray(b)) {
+      return [...a, ...b];
+    }
+
+    return [...a, b];
+  }
+
+  if (Array.isArray(b)) {
+    return [a, ...b];
+  }
+
+  return [a, b];
+}
+
+export function mergePolymorphicProps<
   Props extends WithPolymorphicAttrs<any, As, Mix>,
   NextProps,
   As extends AllowedTarget,
@@ -137,62 +164,25 @@ export function polymorphicComponentProps<
   props: Props,
   { as, mix }: undefined | WithPolymorphicAttrs<NextProps, As, Mix> = {}
 ) {
-  let finalAs: AllowedTarget[] = [];
-
-  if (props.mix) {
-    if (Array.isArray(props.mix)) {
-      finalAs = [...props.mix, ...finalAs];
-    } else {
-      finalAs = [...[props.mix], ...finalAs];
-    }
-  }
+  const res: Record<string, AllowedTarget> = {};
 
   if (props.as) {
-    if (Array.isArray(props.as)) {
-      finalAs = [...finalAs, ...props.as];
-    } else {
-      finalAs = [...finalAs, ...[props.as]];
-    }
+    res.as = props.as;
   }
 
-  if (mix) {
-    if (Array.isArray(mix)) {
-      finalAs = finalAs.concat(mix);
-    } else {
-      finalAs = finalAs.concat([mix]);
-    }
+  if (props.mix) {
+    res.mix = props.mix;
   }
 
   if (as) {
-    if (Array.isArray(as)) {
-      finalAs = finalAs.concat(as);
-    } else {
-      finalAs = finalAs.concat([as]);
-    }
+    res.as = mergePolyProps(res.as, as);
   }
 
-  if (finalAs.length > 0) {
-    return {
-      as: finalAs.length === 1 ? finalAs[0] : finalAs,
-    } as WithPolymorphicAttrs<NextProps, As, Mix>;
+  if (mix) {
+    res.mix = mergePolyProps(res.mix, mix);
   }
 
-  return undefined;
-}
-
-function polymorphicComponentTarget<
-  Props extends WithPolymorphicAttrs<Props, unknown, unknown>
->(props: Props | undefined, originalComponent: ElementType) {
-  if (props?.as) {
-    if (Array.isArray(props.as)) {
-      const [currentTarget, ...restAs] = props.as;
-      return { currentTarget, restAs };
-    }
-
-    return { currentTarget: props.as, restAs: undefined };
-  }
-
-  return { currentTarget: originalComponent, restAs: undefined };
+  return res as WithPolymorphicAttrs<NextProps, As, Mix>;
 }
 
 interface IProps {
@@ -239,18 +229,13 @@ function styled(tag: any): any {
     }
 
     const render = (props: any, ref: any) => {
-      const { class: className } = props;
-      const polyProps = polymorphicComponentProps(props);
-      const { currentTarget, restAs } = polymorphicComponentTarget(
-        polyProps,
-        tag
-      );
+      const { as: component = tag, mix, class: className } = props;
 
       const forcedRemovedProps = omit(props, ['as', 'mix', 'class']);
       const filteredProps: IProps =
         options.propsFiltering === 'dollar-sign'
           ? filterPropsDollarSign(forcedRemovedProps)
-          : filterPropsAutomatic(options, currentTarget, forcedRemovedProps);
+          : filterPropsAutomatic(options, component, forcedRemovedProps);
 
       filteredProps.ref = ref;
       filteredProps.className = options.atomic
@@ -285,12 +270,44 @@ function styled(tag: any): any {
         filteredProps.style = style;
       }
 
-      const targetProps = {
-        ...filteredProps,
-        ...(restAs ? { as: restAs } : {}),
+      const polyProps: { as?: any } = {};
+
+      const getElement = () => {
+        if (Array.isArray(mix) && mix.length > 0) {
+          const [current, ...rest] = mix;
+
+          if (Array.isArray(component)) {
+            polyProps.as = [...rest, ...props.as];
+          } else if (component) {
+            polyProps.as = [...rest, component];
+          } else {
+            polyProps.as = rest;
+          }
+
+          return current;
+        }
+
+        if (Array.isArray(component)) {
+          const [current, ...rest] = component;
+
+          if (rest && rest.length > 0) {
+            polyProps.as = rest;
+          }
+
+          return current;
+        }
+
+        return component;
       };
 
-      return React.createElement(currentTarget, targetProps);
+      const renderEl = getElement();
+
+      const targetProps = {
+        ...filteredProps,
+        ...polyProps,
+      };
+
+      return React.createElement(renderEl, targetProps);
     };
 
     const Result = React.forwardRef
@@ -342,7 +359,8 @@ type GatherElementTypeProps<T> = T extends ElementType
   ? Spread<GatherElementTypeProps<Element>, GatherElementTypeProps<RestElement>>
   : T extends [infer Element]
   ? GatherElementTypeProps<Element>
-  : {};
+  : // eslint-disable-next-line @typescript-eslint/ban-types
+    {};
 
 interface WithPolymorphicAttrs<
   Props,
