@@ -96,7 +96,17 @@ function filterPropsAutomatic<
 function filterPropsDollarSign<
   T extends Record<string, unknown>,
   TKeys extends keyof T
->(props: Partial<T>): Partial<Omit<T, TKeys>> {
+>(
+  props: Partial<T>,
+  component: any,
+  isFinalComponent: boolean
+): Partial<Omit<T, TKeys>> {
+  const isPrimitive = typeof component === 'string' && isFinalComponent;
+
+  if (!isPrimitive) {
+    return props;
+  }
+
   const filteredProps = { ...props };
 
   Object.keys(filteredProps).forEach((key) => {
@@ -111,6 +121,8 @@ function filterPropsDollarSign<
 const warnIfInvalid = (value: unknown, componentName: string) => {
   if (process.env.NODE_ENV !== 'production') {
     if (
+      value === undefined ||
+      value === null ||
       typeof value === 'string' ||
       // eslint-disable-next-line no-self-compare,no-restricted-globals
       (typeof value === 'number' && isFinite(value))
@@ -231,10 +243,56 @@ function styled(tag: any): any {
     const render = (props: any, ref: any) => {
       const { as: component = tag, mix, class: className } = props;
 
+      const polyProps: { as?: any } = {};
+
+      const getElement = () => {
+        if (mix) {
+          const mixArray = Array.isArray(mix) ? mix : [mix];
+
+          if (Array.isArray(mixArray) && mixArray.length > 0) {
+            const [current, ...rest] = mixArray;
+
+            if (Array.isArray(component)) {
+              polyProps.as = [...rest, ...props.as];
+            } else if (component) {
+              polyProps.as = [...rest, component];
+            } else {
+              polyProps.as = rest;
+            }
+
+            return current;
+          }
+        }
+
+        if (Array.isArray(component)) {
+          const [current, ...rest] = component;
+
+          if (rest && rest.length > 0) {
+            polyProps.as = rest;
+          }
+
+          return current;
+        }
+
+        return component;
+      };
+
+      const renderEl = getElement();
+
+      const hasNoMorePolyProps =
+        (Array.isArray(mix) ? mix.length === 0 : !mix) &&
+        (Array.isArray(polyProps.as)
+          ? polyProps.as.length === 0
+          : !polyProps.as);
+
       const forcedRemovedProps = omit(props, ['as', 'mix', 'class']);
       const filteredProps: IProps =
         options.propsFiltering === 'dollar-sign'
-          ? filterPropsDollarSign(forcedRemovedProps)
+          ? filterPropsDollarSign(
+              forcedRemovedProps,
+              renderEl,
+              hasNoMorePolyProps
+            )
           : filterPropsAutomatic(options, component, forcedRemovedProps);
 
       filteredProps.ref = ref;
@@ -271,42 +329,6 @@ function styled(tag: any): any {
 
         filteredProps.style = style;
       }
-
-      const polyProps: { as?: any } = {};
-
-      const getElement = () => {
-        if (mix) {
-          const mixArray = Array.isArray(mix) ? mix : [mix];
-
-          if (Array.isArray(mixArray) && mixArray.length > 0) {
-            const [current, ...rest] = mixArray;
-
-            if (Array.isArray(component)) {
-              polyProps.as = [...rest, ...props.as];
-            } else if (component) {
-              polyProps.as = [...rest, component];
-            } else {
-              polyProps.as = rest;
-            }
-
-            return current;
-          }
-        }
-
-        if (Array.isArray(component)) {
-          const [current, ...rest] = component;
-
-          if (rest && rest.length > 0) {
-            polyProps.as = rest;
-          }
-
-          return current;
-        }
-
-        return component;
-      };
-
-      const renderEl = getElement();
 
       const targetProps = {
         ...filteredProps,
@@ -389,7 +411,7 @@ type HtmlStyledTag<TName extends keyof JSX.IntrinsicElements> = <
         // Without Omit here TS tries to infer TAdditionalProps
         // from a component passed for interpolation
         props: JSX.IntrinsicElements[TName] & Omit<TAdditionalProps, never>
-      ) => undefined | null | string | number)
+      ) => null | undefined | string | number)
   >
 ) => StyledComponent<JSX.IntrinsicElements[TName] & TAdditionalProps>;
 
@@ -406,7 +428,9 @@ type ComponentStyledTagWithInterpolation<TTrgProps, TOrigCmp> = <OwnProps = {}>(
   strings: TemplateStringsArray,
   ...exprs: Array<
     | StaticPlaceholder
-    | ((props: NoInfer<OwnProps & TTrgProps>) => string | number)
+    | ((
+        props: NoInfer<OwnProps & TTrgProps>
+      ) => null | undefined | string | number)
   >
 ) => keyof OwnProps extends never
   ? StyledMeta & TOrigCmp
