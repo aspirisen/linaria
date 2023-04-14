@@ -369,7 +369,7 @@ type StyledComponent<T> = StyledMeta &
         props: T extends object ? PolymorphicComponentProps<T, E, Mix> : T
       ) => React.ReactElement<T>);
 
-type KnownTarget = ElementType | readonly ElementType[];
+export type KnownTarget = ElementType | readonly ElementType[];
 export type AllowedTarget = unknown | KnownTarget;
 
 export type PolymorphicComponentProps<

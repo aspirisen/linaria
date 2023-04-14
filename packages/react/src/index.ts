@@ -3,6 +3,7 @@ export type {
   StyledJSXIntrinsics,
   Styled,
   PolymorphicComponentProps,
+  KnownTarget,
   AllowedTarget,
 } from './styled';
 export { mergePolymorphicProps } from './styled';
